@@ -100,9 +100,28 @@ def track_embed_albumid_trackid(url):
     else:
         return response.status_code
     
-def track_embed_generator(album_id,track_id,url,title,artist):
-    return f"""<iframe style="border: 0; width: 350px; height: 470px;" src="https://bandcamp.com/EmbeddedPlayer/album={album_id}/size=large/bgcol=ffffff/linkcol=0687f5/tracklist=false/track={track_id}/transparent=true/" seamless><a href="{url}">{title} by {artist}</a></iframe>"""
+def track_embed_generator(album_id,track_id,url,title,artist,album_support_count,track_support_count):
 
+    def compute_number(x, y):
+        s = x + y
+        if s == 0:
+            return 0.524
+        elif 1 < s <= 40:
+            return 0.67
+        elif 40 < s <= 50:
+            return s * 0.018856
+        elif 50 < s <= 59:
+            return s * 0.014856
+        elif 60 <= s < 80:
+            return 0.95
+        elif 80 <= s < 100:
+            return 0.98
+        elif s >= 100:
+            return 1.0
+
+    size = (compute_number(album_support_count,track_support_count)*420)
+
+    return f"""<iframe style="border: 0; width: {int(size)}px; height: {int(size)}px;" src="https://bandcamp.com/EmbeddedPlayer/album={album_id}/size=large/bgcol=ffffff/linkcol=0687f5/tracklist=false/track={track_id}/transparent=true/" seamless><a href="{url}">{title} by {artist}</a></iframe>"""
 
 def verify_album(url):
     pattern = re.compile(r'bandcamp\.com/(album)')
@@ -150,10 +169,10 @@ def embed_tracks_generator(tracks):
                         track_url = (match.group(1)) + title.find("a").get('href')
                         if track_embed_albumid_trackid(track_url) is not None:
                             album_id, track_id = track_embed_albumid_trackid(track_url)
-                            track_embed_code = track_embed_generator(album_id,track_id,url,song_title,artist)
                             response = requests.get(track_url)
                             track_soup = BeautifulSoup(response.text, 'html.parser')
                             track_support_count = review_count(track_soup)
+                            track_embed_code = track_embed_generator(album_id,track_id,url,song_title,artist,album_support_count,track_support_count)
                             embed_tracks.loc[len(embed_tracks.index)] = [artist,song_title,album_support_count,track_support_count,url,track_url,track_embed_code]
                         elif track_embed_albumid_trackid(track_url) is None:
                             print('None track url')
