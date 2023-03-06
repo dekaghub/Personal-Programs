@@ -15,7 +15,7 @@ def verify_link(url):
     return bool(match)
 
 def replace_special_chars_with_dash(s):
-    return '-'.join(filter(None, re.split(r'[^a-zA-Z0-9\s]+', s)))
+    return '-'.join(filter(None, re.split(r'[^a-zA-Z0-9\s]+', s.replace(' ', '-'))))
 
 def clickNextCarousel(webelement):
     click = 1
