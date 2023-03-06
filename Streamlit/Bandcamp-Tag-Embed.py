@@ -7,8 +7,6 @@ import pandas as pd
 import time
 import random
 import re
-from collections import deque
-
 
 
 def verify_link(url):
@@ -135,7 +133,7 @@ def embed_tracks_generator(tracks):
 
     for x in tracks.sample(10).link:
         url = x.replace('?from=hp','')
-        if re.search(r'bandcamp\.com/(album)', url):
+        if 'bandcamp.com/album' in url:
             response = requests.get(url)
             if response.status_code == 200:
                 soup = BeautifulSoup(response.text, 'html.parser')
