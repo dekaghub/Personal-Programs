@@ -24,6 +24,8 @@ def clickNextCarousel(webelement):
         time.sleep(1)
         try:
             btn = webelement.find_element(By.CLASS_NAME, 'next-button')
+            if btn is None:
+                break
             btn.click()
             click-=1
             flag = True
@@ -33,6 +35,20 @@ def clickNextCarousel(webelement):
         except ElementClickInterceptedException:
                 flag = False
                 break
+        except NoSuchElementException:
+                flag = False
+                break
+    return flag
+
+def digorempty(driver):
+    flag = False
+    while flag is False:
+        time.sleep(1)
+        try:
+            element = driver.find_element(By.CLASS_NAME,"dig-deeper-items")
+            flag = True
+        except NoSuchElementException:
+            break
     return flag
 
 # tag = "house"
@@ -44,36 +60,53 @@ def tracks(tag):
     # Open the web page
     driver = webdriver.Chrome()
     driver.get(url)
-    time.sleep(2)
+    time.sleep(1)
 
     carousels = driver.find_elements(By.CLASS_NAME, 'carousel-wrapper')
 
     sections_tracks = pd.DataFrame(columns=['section','artist','title','link'])
     
-    for carousel in carousels:
-        
-        while True:
-            carousel_soup = BeautifulSoup(carousel.get_attribute("outerHTML"), 'html.parser')
-            section_title = carousel_soup.find("h3",{"class":"carousel-title"}).contents[0].strip()        
+    if carousels:
+        for carousel in carousels:
+            while True:
+                carousel_soup = BeautifulSoup(carousel.get_attribute("outerHTML"), 'html.parser')
+                section_title = carousel_soup.find("h3",{"class":"carousel-title"}).contents[0].strip()        
 
-            section = carousel_soup.find_all("div",{"class":"col col-3-12 item"})
-            if section == []:
-                section = carousel_soup.find_all("div",{"class":"col col-3-15 item"})
-            if section == []:
-                section = carousel_soup.find_all("div",{"class":"col col-5-15 item"})
-            if section != []:
-                for track in section:
+                section = carousel_soup.find_all("div",{"class":"col col-3-12 item"})
+                if section == []:
+                    section = carousel_soup.find_all("div",{"class":"col col-3-15 item"})
+                if section == []:
+                    section = carousel_soup.find_all("div",{"class":"col col-5-15 item"})
+                if section != []:
+                    for track in section:
+                        temp = track.find("div",{"class":"info"})
+                        link = temp.find('a', href=True).get('href')
+                        if verify_link(link):
+                            title = temp.find("div",{"class":"title"}).text
+                            artist = temp.find("div",{"class":"artist"}).find('span').text
+                            if ~sections_tracks[sections_tracks.duplicated(subset=sections_tracks.columns)].isin([section_title,artist,title,link]).any().any():
+                                sections_tracks.loc[len(sections_tracks.index)] = [section_title,artist,title,link]
+                        else:
+                            break
+                if (clickNextCarousel(carousel) == False):
+                    break
+    else:
+        if digorempty(driver):
+            alt_section = driver.find_element(By.CLASS_NAME,"dig-deeper-items")
+            alt_tracks = BeautifulSoup(alt_section.get_attribute("outerHTML"), 'html.parser')
+            alt_tracks = alt_tracks.find_all("div",{"class":"col col-3-15 dig-deeper-item item"})
+            if alt_tracks:
+                for track in alt_tracks:
                     temp = track.find("div",{"class":"info"})
                     link = temp.find('a', href=True).get('href')
                     if verify_link(link):
                         title = temp.find("div",{"class":"title"}).text
                         artist = temp.find("div",{"class":"artist"}).find('span').text
-                        if ~sections_tracks[sections_tracks.duplicated(subset=sections_tracks.columns)].isin([section_title,artist,title,link]).any().any():
-                            sections_tracks.loc[len(sections_tracks.index)] = [section_title,artist,title,link]
-                    else:
-                        break
-            if (clickNextCarousel(carousel) == False):
-                break
+                    sections_tracks.loc[len(sections_tracks.index)] = ['None',artist,title,link]
+        else:
+            driver.close()
+            return sections_tracks.drop_duplicates().reset_index(drop=True)
+
     driver.close()
 
     return sections_tracks.drop_duplicates().reset_index(drop=True)
@@ -94,8 +127,10 @@ def track_embed_albumid_trackid(url):
             break
         y = soup.find("meta",{"property":"og:video"})
         # track id
-        track_id = (y.get("content").split("track=")[1].split("/")[0])
-
+        if y is not None:
+            track_id = (y.get("content").split("track=")[1].split("/")[0])
+        else:
+            return None
         return (album_id, track_id)
     else:
         return response.status_code
@@ -106,15 +141,15 @@ def track_embed_generator(album_id,track_id,url,title,artist,album_support_count
         s = x + y
         if s == 0:
             return 0.524
-        elif 1 < s <= 40:
+        elif 0 < s <= 40:
             return 0.67
         elif 40 < s <= 50:
             return s * 0.018856
-        elif 50 < s <= 59:
+        elif 50 < s <= 60:
             return s * 0.014856
-        elif 60 <= s < 80:
+        elif 60 < s <= 80:
             return 0.95
-        elif 80 <= s < 100:
+        elif 80 < s < 100:
             return 0.98
         elif s >= 100:
             return 1.0
@@ -146,11 +181,16 @@ def review_count(soup):
 
 
 def embed_tracks_generator(tracks):
+    
+    if tracks.empty:
+        return None
     pattern = re.compile(r'(https://.*\.bandcamp\.com)')
 
     embed_tracks = pd.DataFrame(columns=['artist','title','album_support_count','track_support_count','album_url','track_url','track_embed'])
 
-    for x in tracks.sample(10).link:
+    size = 10 if len(tracks) > 10 else len(tracks)-1
+
+    for x in tracks.sample(size).link:
         url = x.replace('?from=hp','')
         if 'bandcamp.com/album' in url:
             response = requests.get(url)
